@@ -1,0 +1,75 @@
+# Builds the standalone programs (packaging/portalite2snirf.spec) on Windows and macOS.
+# Run it from the Actions tab to get the programs as downloadable artifacts, or push a tag
+# (git tag v0.1.0 && git push origin v0.1.0) to also publish them on a GitHub release.
+name: Standalone programs
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UV_PYTHON_PREFERENCE: only-system  # python.org builds: PyInstaller bundles their Tcl/Tk properly
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: PortaLite-to-SNIRF-windows
+          - os: macos-latest
+            name: PortaLite-to-SNIRF-macos-apple-silicon
+          - os: macos-15-intel
+            name: PortaLite-to-SNIRF-macos-intel
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install
+        run: uv sync --group build --python "${{ steps.python.outputs.python-path }}"
+      - name: Test
+        run: uv run --no-sync pytest -q
+      - name: Build
+        run: uv run --no-sync pyinstaller --noconfirm packaging/portalite2snirf.spec
+
+      - name: Convert the sample recording with the built program
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then program="dist/PortaLite to SNIRF.exe"
+          else program="dist/PortaLite to SNIRF.app/Contents/MacOS/PortaLite to SNIRF"; fi
+          "$program" tests/data/sample_recording.csv -o smoke --no-window
+          uv run --no-sync python -c "import h5py; f = h5py.File('smoke/sample_recording.snirf'); print(f['nirs/metaDataTags/ProbePlacement'][()].decode())"
+
+      - name: Zip
+        run: |
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then 7z a "../${{ matrix.name }}.zip" "PortaLite to SNIRF.exe"
+          else ditto -c -k --keepParent "PortaLite to SNIRF.app" "../${{ matrix.name }}.zip"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"

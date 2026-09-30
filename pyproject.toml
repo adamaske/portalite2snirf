@@ -1,0 +1,36 @@
+[project]
+name = "portalite2snirf"
+version = "0.1.0"
+description = "Convert Artinis PortaLite MKII CSV exports to SNIRF"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "adamaske", email = "adamaske123@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "h5py>=3.16.0",
+    "numpy>=2.5.3",
+]
+
+[project.urls]
+Repository = "https://github.com/adamaske/portalite2snirf"
+Releases = "https://github.com/adamaske/portalite2snirf/releases"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.22.3",
+]
+dev = [
+    "mne>=1.13.2",
+    "pytest>=9.1.1",
+    "snirf>=0.8.0",
+]
+
+[project.scripts]
+portalite2snirf = "portalite2snirf.cli:main"
