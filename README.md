@@ -1,88 +1,63 @@
 # portalite2snirf
 
-Converts CSV exports from the Artinis mobile app (PortaLite MKII) into `.snirf` files that
-open in NIRWizard, MNE-NIRS, Cedalion, Homer3 and other SNIRF tools.
+Converts CSV exports from the Artinis PortaLite MKII app to `.snirf`, for NIRWizard, MNE-NIRS,
+Homer3 and other SNIRF tools.
 
-## Use without Python
+## Download
 
-Download the zip for your computer from the [latest release](https://github.com/adamaske/portalite2snirf/releases/latest)
-and unzip it:
+Get the zip for your computer from the [latest release](https://github.com/adamaske/portalite2snirf/releases/latest):
 
-- Windows: `PortaLite-to-SNIRF-windows.zip` holds `PortaLite to SNIRF.exe`.
-- Mac: `PortaLite-to-SNIRF-macos-apple-silicon.zip` (M1 and newer) or
-  `PortaLite-to-SNIRF-macos-intel.zip` holds `PortaLite to SNIRF.app`.
+- Windows: `PortaLite-to-SNIRF-windows.zip`
+- Mac: `PortaLite-to-SNIRF-macos-apple-silicon.zip` (M1 or newer) or `PortaLite-to-SNIRF-macos-intel.zip`
 
-Double-click it and choose one or more PortaLite CSV files, or drop CSV files onto it. Each
-`.snirf` file is written next to its CSV, and a window lists what was converted.
+Unzip it, double-click **PortaLite to SNIRF** and pick your CSV files, or drop them onto it. Each
+`.snirf` file is written next to its CSV.
 
-The programs are not code-signed, so the first launch needs one extra step:
+The programs aren't code-signed, so the first launch needs an extra step:
 
-- Windows: "Windows protected your PC" → More info → Run anyway.
-- Mac: the first double-click is refused. Open System Settings → Privacy & Security, click
-  Open Anyway next to "PortaLite to SNIRF", and confirm.
+- Windows: More info → Run anyway.
+- Mac: try to open it once, then System Settings → Privacy & Security → Open Anyway.
 
-## Use from the command line
+## Command line
 
 ```
-portalite2snirf Measurement_20260918_153745_0.csv            # writes Measurement_..._0.snirf next to it
-portalite2snirf *.csv -o converted/                          # several files into one folder
+uv run portalite2snirf recording.csv          # writes recording.snirf next to it
+uv run portalite2snirf *.csv -o converted/
 ```
 
-Started without files it opens a file picker. Dropping CSV files onto the program converts them.
+Tests: `uv run pytest`.
 
-From source: `uv run portalite2snirf <file.csv>`; tests: `uv run pytest`.
+## What's in the file
 
-## Building the standalone programs
+- The raw 760/850 nm channels as intensity, I = 10^-A. The export stores optical density, so the
+  ΔOD your tool computes matches the Artinis app.
+- Events as `stim` groups, TSI and IMU as `aux`, subject name and app details in `metaDataTags`.
+  Date of birth and gender are left out.
+- The app's ΔO2Hb/ΔHHb columns are left out. Recomputing them from the raw data gives the same
+  time courses (r > 0.999 in MNE), differing in scale by about 10% because Artinis uses other
+  extinction coefficients.
 
-`.github/workflows/release.yml` builds them on GitHub's Windows and macOS machines. Run it from
-the Actions tab to download the programs from the run, or push a version tag to publish them as
-a release:
-
-```
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-Locally, `uv sync --group build && uv run pyinstaller packaging/portalite2snirf.spec` builds for
-the system you are on into `dist/`; PyInstaller cannot build for another system. Use a python.org
-(or system) Python: uv's own Python builds leave Tcl/Tk out of the bundle, so the program cannot
-open its windows.
-
-## What ends up in the SNIRF file
-
-| CSV | SNIRF |
-|---|---|
-| `Rx*-Tx* (760/850 nm)` columns | `data1`, CW amplitude (dataType 1), stored as I = 10^-A |
-| Events (label, seconds) | one `stim` group per label, duration 0 |
-| TSI, IMU (IMU only if the sensor has one) | `aux` channels |
-| Subject name, first-sample time, app version, DPFs, event descriptions | `metaDataTags` |
-
-The raw columns in the export are log10 attenuation (optical density), not light intensity.
-Storing I = 10^-A means a tool that computes ΔOD = -log(I/I0) gets back exactly the attenuation
-changes the Artinis app used. Date of birth and gender are not copied.
-
-Probe geometry (mm), per sensor: Rx1-Tx1/Tx2/Tx3 = 29/35/41 (long channels), Rx2-Tx1/Tx2/Tx3 =
-7.2/8.0/7.2 (short channels). These distances match the Artinis spec sheet and were confirmed by
-back-calculating the pathlengths in the app's own ΔO2Hb/ΔHHb columns.
-
-Optodes are placed on a standard head: the file carries the 300 10-5 landmarks (Nz, LPA, RPA,
-Cz, ... in RAS mm) from the NIRWizard example recordings, and each sensor sits just above the
-eyebrows, centred on AFp4 ("Right" in the sensor label) or AFp3 ("Left"). It is worn level: the
-long axis follows the scalp at the centre landmark's height instead of the AFp row, which drops
-towards the temples. The optodes are solved onto the scalp so the straight-line 3D distances are
-exactly the ones above. The transmitter cluster sits towards the midline and Rx1 laterally, as
-the sensor is worn (`RX1_MEDIAL` in `placement.py`). These are template
-positions, not digitised ones. 2D positions are an azimuthal projection around Cz (nose up).
-
-The app's ΔO2Hb/ΔHHb columns are not copied: re-deriving them from the raw data in your
-analysis tool gives the same time courses (r > 0.999 for O2Hb in MNE), scaled by ~10% because
-Artinis uses a different extinction-coefficient table.
+Optode positions come from a template head, not a digitiser. Each sensor sits level just above the
+eyebrow, centred on AFp4 (right) or AFp3 (left), with the transmitters towards the midline. The
+3D distances are 29/35/41 mm for the long channels and 7.2/8.0/7.2 mm for the short ones.
 
 ## Limitations
 
-- Only single-sensor exports have been seen. Two-sensor files are parsed on the assumption that
-  the second sensor's columns follow the first under their own `,,,Sensor '...'` banner.
-- Times are local wall-clock time; the export carries no timezone.
+- Only single-sensor exports have been tested. Two-sensor files are parsed by assumption.
+- Times are local; the export has no timezone.
+
+## Building
+
+Push a version tag and GitHub Actions builds the Windows and macOS programs and publishes a
+release:
+
+```
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+To build locally, run `uv sync --group build && uv run pyinstaller packaging/portalite2snirf.spec`
+with a python.org Python. uv's own Python leaves Tcl/Tk out, so the program can't open windows.
 
 ## Licence
 
-MIT, see `LICENSE`.
+MIT
